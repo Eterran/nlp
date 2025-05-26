@@ -2,7 +2,7 @@
 This is a simple solution that uses pretrained NLP model(google/pegasus-cnn) to summarise input articles and streamlit for web UI.
 
 ## Demo
-[View Demo](bluelantern.tplinkdns.com:8501)
+[View Demo](http://bluelantern.tplinkdns.com:8501/)
 
 ### Features
 - Dealing with long inputs (truncate)                Done  
