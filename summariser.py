@@ -2,19 +2,22 @@ from transformers import PegasusForConditionalGeneration, PegasusTokenizer, pipe
 
 class Summarizer:
     def __init__(self, model_name="google/pegasus-cnn_dailymail"):
-        """
-        Initializes the Summarizer with a model and tokenizer.
-        """
         self.model_name = model_name
         self.tokenizer = None
         self.model = None
-        self.pipeline = None
+
+        # max input?
+        if "pegasus" in self.model_name.lower():
+            self.effective_input_token_limit = 512 
+        elif "bart" in self.model_name.lower():
+            self.effective_input_token_limit = 1024
+        else:
+            self.effective_input_token_limit = 512 
+            print(f"Warning: Unknown model type for effective_input_token_limit, defaulting to {self.effective_input_token_limit}.")
+
         self._load_model()
 
     def _load_model(self):
-        """
-        Loads the model and tokenizer.
-        """
         try:
             print(f"Loading tokenizer: {self.model_name}...")
             self.tokenizer = PegasusTokenizer.from_pretrained(self.model_name)
@@ -22,72 +25,134 @@ class Summarizer:
 
             print(f"Loading model: {self.model_name}...")
             self.model = PegasusForConditionalGeneration.from_pretrained(self.model_name)
+            # self.model.to("cpu")
             print("Model loaded successfully!")
-            
-            # print("Creating summarization pipeline...")
-            # self.pipeline = pipeline("summarization", model=self.model, tokenizer=self.tokenizer, device=-1) # device=-1 for CPU
-            # print("Pipeline created successfully!")
-
         except Exception as e:
             print(f"Error loading model/tokenizer for {self.model_name}: {e}")
             raise
+    
+    def _summarize_single_chunk(self, text_chunk: str, min_length: int, max_length: int) -> str:
+        """Helper function to summarize a single chunk of text."""
+        if not self.model or not self.tokenizer:
+            return "Error: Model and/or tokenizer not loaded for chunk."
 
-    def summarize(self, text: str, min_length: int = 30, max_length: int = 150) -> str:
+        try:
+            inputs = self.tokenizer(
+                text_chunk,
+                return_tensors="pt",
+                truncation=True, # Should not truncate if chunking is done right
+                max_length=self.effective_input_token_limit 
+            )
+            # inputs = inputs.to(self.model.device)
+
+            summary_ids = self.model.generate(
+                inputs["input_ids"],
+                num_beams=4,
+                min_length=min_length,
+                max_length=max_length,
+                early_stopping=True
+            )
+            summary_text = self.tokenizer.decode(
+                summary_ids[0],
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=True
+            )
+            return summary_text.strip()
+        except Exception as e:
+            import traceback
+            print(f"Error summarizing chunk: {e}")
+            traceback.print_exc()
+            return f"[Error summarizing chunk: {e}]"
+
+    def summarize(self, text: str, min_length_per_chunk: int = 20, max_length_per_chunk: int = 80, 
+                  overall_min_length: int = 30, overall_max_length: int = 150) -> str:
         """
-        Generates a summary for the given English text.
+        Generates a summary for the given English text, using chunking if necessary.
 
         Args:
             text (str): The English text to summarize.
-            min_length (int): The minimum length of the generated summary.
-            max_length (int): The maximum length of the generated summary.
+            min_length_per_chunk (int): Min length for summary of each individual chunk.
+            max_length_per_chunk (int): Max length for summary of each individual chunk.
+            overall_min_length (int): Desired min length of the final combined summary (not strictly enforced yet).
+            overall_max_length (int): Desired max length of the final combined summary (not strictly enforced yet).
 
         Returns:
             str: The generated summary, or an error message if summarization fails.
         """
         if not self.model or not self.tokenizer:
             return "Error: Model and/or tokenizer not loaded."
+        if not text.strip():
+            return "Error: Input text is empty."
 
-        try:
-            print("Input text received by summarizer engine.")
-            # 1. Tokenization
-            inputs = self.tokenizer(text, 
-                                    return_tensors="pt",
-                                    truncation=True,        # truncate
-                                    max_length=self.model.config.max_position_embeddings
-                                   ) 
-            # inputs = inputs.to("cpu")
-            # self.model.to("cpu")
+        # 1. Tokenize the entire text to check its length
+        all_input_ids = self.tokenizer.encode(text, add_special_tokens=False) # Get raw token ID
+        total_tokens = len(all_input_ids)
+        print(f"Total tokens in input text: {total_tokens}")
 
-            # check input token length, if exceed, truncate
-            print(f"Input tokenized. Input shape: {inputs['input_ids'].shape}")
-            if inputs['input_ids'].shape[1] == self.model.config.max_position_embeddings:
-                print(f"NOTE: Input text was truncated to {self.model.config.max_position_embeddings} tokens.")
+        # Check if chunking is needed
+        if total_tokens <= self.effective_input_token_limit:
+            print("Input text is within token limit. Summarizing as a single chunk.")
+            return self._summarize_single_chunk(text, overall_min_length, overall_max_length)
+        else:
+            print(f"Input text exceeds token limit ({total_tokens} > {self.effective_input_token_limit}). Applying chunking.")
+            
+            # 2. Create Chunks
+            # currently: split by tokens, with some overlap to maintain context.
+            # improvements: maybe split by sentences or paragraphs using NLTK or spaCy.
+            
+            chunk_size = self.effective_input_token_limit - 50 # Leave some room
+            overlap_size = 50 # Number of tokens to overlap between chunks
 
+            chunks = []
+            start_idx = 0
+            while start_idx < total_tokens:
+                end_idx = min(start_idx + chunk_size, total_tokens)
+                chunk_token_ids = all_input_ids[start_idx:end_idx]
+                chunk_text = self.tokenizer.decode(chunk_token_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+                chunks.append(chunk_text)
+                
+                if end_idx == total_tokens:
+                    break
+                start_idx += (chunk_size - overlap_size) # Move window forward
+                if start_idx >= end_idx : # Safety break if overlap is too large or chunk_size too small
+                    print("Warning: Chunking logic might have an issue with start/end index. Breaking.")
+                    break
+            
+            print(f"Created {len(chunks)} chunks.")
+            if not chunks:
+                return "Error: Failed to create any chunks from the text."
 
-            # 2. generate summary
-            summary_ids = self.model.generate(
-                inputs["input_ids"],
-                num_beams=4, # Common value for beam search
-                min_length=min_length,
-                max_length=max_length, # Max length of the *summary*
-                early_stopping=True # Stop generation when end-of-sentence token (</s>) is produced
-            )
+            # 3. Summarize each chunk
+            chunk_summaries = []
+            for i, chunk_text in enumerate(chunks):
+                print(f"Summarizing chunk {i+1}/{len(chunks)}...")
+                # Adjust min/max length for chunk summaries; they should be shorter
+                chunk_summary = self._summarize_single_chunk(chunk_text, 
+                                                             min_length_per_chunk, 
+                                                             max_length_per_chunk)
+                if not chunk_summary.startswith("[Error"):
+                    chunk_summaries.append(chunk_summary)
+                print(f"Chunk {i+1} summary: {chunk_summary[:100]}...")
 
-            # 3. Decoding
-            summary_text = self.tokenizer.decode(summary_ids[0], 
-                                                 skip_special_tokens=True,
-                                                 clean_up_tokenization_spaces=True)
+            if not chunk_summaries:
+                return "Error: Failed to generate summaries for any chunk."
 
-            # 4. Post-processing
-            summary_text = summary_text.strip()
+            # 4. Combine chunk summaries
+            # Simple concatenation for now.
+            # TODO: This might make the summary too long or repetitive.
+            # Consider a second summarization pass (hierarchical) in the future.
+            final_summary = " ".join(chunk_summaries)
+            
+            # Optional: A very naive truncation of the combined summary if it's too long
+            # A better approach would be to summarize the combined summaries.
+            if len(self.tokenizer.encode(final_summary)) > overall_max_length + 50 : # +50 as buffer
+                 print(f"Combined summary is too long. Truncating naively. Consider hierarchical summarization.")
+                 # This is a crude way to truncate. Better to summarize the summaries.
+                 # For now, let's just return it, or truncate by tokens
+                 final_summary_tokens = self.tokenizer.encode(final_summary, truncation=True, max_length=overall_max_length)
+                 final_summary = self.tokenizer.decode(final_summary_tokens, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
-            return summary_text
-
-        except Exception as e:
-            import traceback
-            print(f"Error during summarization: {e}")
-            traceback.print_exc()
-            return "Error: Summarization failed."
+            return final_summary.strip()
 
 if __name__ == "__main__":
     print("Testing Summarizer Engine...")

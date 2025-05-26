@@ -43,8 +43,10 @@ def main():
                 try:
                     summary = summarizer.summarize(
                         article_text, 
-                        min_length=min_summary_length, 
-                        max_length=max_summary_length
+                        # min_length_per_chunk=, 
+                        # max_length_per_chunk=,
+                        overall_min_length=min_summary_length,
+                        overall_max_length=max_summary_length
                     )
                     st.subheader("Generated Summary:")
                     st.success(summary)
@@ -54,7 +56,7 @@ def main():
                     st.error("Please ensure the model is loaded correctly and the input text is valid.")
     
     st.markdown("---")
-    st.markdown("Powered by [Streamlit](https://streamlit.io) and Hugging Face Transformers.")
+    st.markdown("Powered by google/pegasus-cnn_dailymail.")
 
 
 if __name__ == "__main__":
