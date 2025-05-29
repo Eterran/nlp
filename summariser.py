@@ -1,35 +1,341 @@
 from transformers import PegasusForConditionalGeneration, PegasusTokenizer, pipeline
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer as NLLBTokenizer
+from transformers import M2M100ForConditionalGeneration, M2M100Config
+from langdetect import detect, LangDetectException
+import torch
+
+def get_language_code(text: str) -> tuple[str | None, str | None]:
+    """Detects language and returns a tuple: (langdetect_code, nllb_compatible_code)."""
+    try:
+        lang_code_ld = detect(text)
+        
+        # --- NLLB Language Code Mapping ---
+        # NLLB uses Flores-200 codes
+        nllb_lang_map = {
+            'en': 'eng_Latn',    # English
+            'es': 'spa_Latn',    # Spanish
+            'fr': 'fra_Latn',    # French
+            'de': 'deu_Latn',    # German
+            'it': 'ita_Latn',    # Italian
+            'pt': 'por_Latn',    # Portuguese
+            'zh-cn': 'zho_Hans', # Chinese (Simplified)
+            'zh-tw': 'zho_Hant', # Chinese (Traditional)
+            'ja': 'jpn_Jpan',    # Japanese
+            'ko': 'kor_Hang',    # Korean
+            'ar': 'ara_Arab',    # Arabic
+            'hi': 'hin_Deva',    # Hindi
+            'ru': 'rus_Cyrl',    # Russian
+            'bn': 'ben_Beng',    # Bengali
+            'pa': 'pan_Guru',    # Punjabi
+            'ur': 'urd_Arab',    # Urdu
+            'ta': 'tam_Taml',    # Tamil
+            'te': 'tel_Telu',    # Telugu
+            'ml': 'mal_Mlym',    # Malayalam
+            'gu': 'guj_Gujr',    # Gujarati
+            'mr': 'mar_Deva',    # Marathi
+            'id': 'ind_Latn',    # Indonesian
+            'vi': 'vie_Latn',    # Vietnamese
+            'th': 'tha_Thai',    # Thai
+            'tr': 'tur_Latn',    # Turkish
+            'fa': 'pes_Arab',    # Persian
+            'uk': 'ukr_Cyrl',    # Ukrainian
+            'pl': 'pol_Latn',    # Polish
+            'nl': 'nld_Latn',    # Dutch
+            'ro': 'ron_Latn',    # Romanian
+            'cs': 'ces_Latn',    # Czech
+            'sv': 'swe_Latn',    # Swedish
+            'fi': 'fin_Latn',    # Finnish
+            'da': 'dan_Latn',    # Danish
+            'no': 'nob_Latn',    # Norwegian (Bokmål)
+            'el': 'ell_Grek',    # Greek
+            'he': 'heb_Hebr',    # Hebrew
+            'hu': 'hun_Latn',    # Hungarian
+            'bg': 'bul_Cyrl',    # Bulgarian
+            'sr': 'srp_Cyrl',    # Serbian (Cyrillic)
+            'hr': 'hrv_Latn',    # Croatian
+            'sk': 'slk_Latn',    # Slovak
+            'sl': 'slv_Latn',    # Slovenian
+            'et': 'est_Latn',    # Estonian
+            'lv': 'lav_Latn',    # Latvian
+            'lt': 'lit_Latn',    # Lithuanian
+            'sw': 'swh_Latn',    # Swahili
+            'am': 'amh_Ethi',    # Amharic
+            'yo': 'yor_Latn',    # Yoruba
+            'ig': 'ibo_Latn',    # Igbo
+            'zu': 'zul_Latn',    # Zulu
+            'xh': 'xho_Latn',    # Xhosa
+            'my': 'mya_Mymr',    # Burmese
+            'km': 'khm_Khmr',    # Khmer
+            'lo': 'lao_Laoo',    # Lao
+            'ne': 'npi_Deva',    # Nepali
+            'si': 'sin_Sinh',    # Sinhala
+            'az': 'azj_Latn',    # Azerbaijani (North)
+            'kk': 'kaz_Cyrl',    # Kazakh
+            'uz': 'uzn_Latn',    # Uzbek (Northern)
+            'mn': 'khk_Cyrl',    # Mongolian
+            'ps': 'pbt_Arab',    # Pashto
+            'tg': 'tgk_Cyrl',    # Tajik
+            'tk': 'tuk_Latn',    # Turkmen
+            'so': 'som_Latn',    # Somali
+        }
+
+        # Fallback for unlisted langdetect codes
+        nllb_code = nllb_lang_map.get(lang_code_ld)
+        if not nllb_code and '-' in lang_code_ld: # Try stripping region for NLLB map
+             nllb_code = nllb_lang_map.get(lang_code_ld.split('-')[0])
+
+        if not nllb_code:
+            print(f"Warning: No NLLB mapping for langdetect code '{lang_code_ld}'. Translation might fail.")
+        
+        return lang_code_ld, nllb_code
+    
+    except LangDetectException:
+        print("Language could not be detected reliably.")
+        return None, None
 
 class Summarizer:
-    def __init__(self, model_name="google/pegasus-cnn_dailymail"):
-        self.model_name = model_name
-        self.tokenizer = None
-        self.model = None
+    def __init__(self, 
+                 summarizer_model_name="google/pegasus-cnn_dailymail", # "facebook/mbart-large-50"
+                 translator_model_name="facebook/nllb-200-distilled-600M"): # NLLB model
+        
+        self.summarizer_model_name = summarizer_model_name
+        self.translator_model_name = translator_model_name
+        
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"Using device: {self.device}")
 
-        # max input?
-        if "pegasus" in self.model_name.lower():
-            self.effective_input_token_limit = 512 
-        elif "bart" in self.model_name.lower():
+        self.pegasus_tokenizer = None
+        self.pegasus_model = None
+        self.translator_tokenizer = None
+        self.translator_model = None
+
+        if "pegasus" in self.summarizer_model_name.lower():
+            self.effective_input_token_limit = 512
+        elif "bart" in self.summarizer_model_name.lower():
             self.effective_input_token_limit = 1024
         else:
-            self.effective_input_token_limit = 512 
-            print(f"Warning: Unknown model type for effective_input_token_limit, defaulting to {self.effective_input_token_limit}.")
+            self.effective_input_token_limit = 512
+        
+        self._load_models() # Combined loading
 
-        self._load_model()
-
-    def _load_model(self):
+    def _load_models(self):
         try:
-            print(f"Loading tokenizer: {self.model_name}...")
-            self.tokenizer = PegasusTokenizer.from_pretrained(self.model_name)
-            print("Tokenizer loaded successfully!")
+            print(f"Loading Pegasus tokenizer: {self.summarizer_model_name}...")
+            self.pegasus_tokenizer = PegasusTokenizer.from_pretrained(self.summarizer_model_name)
+            print(f"{self.summarizer_model_name} tokenizer loaded.")
+            print(f"Loading Pegasus model: {self.summarizer_model_name}...")
+            self.pegasus_model = PegasusForConditionalGeneration.from_pretrained(self.summarizer_model_name).to(self.device)
+            print(f"{self.summarizer_model_name} model loaded.")
 
-            print(f"Loading model: {self.model_name}...")
-            self.model = PegasusForConditionalGeneration.from_pretrained(self.model_name)
-            # self.model.to("cpu")
-            print("Model loaded successfully!")
+            print(f"Loading NLLB tokenizer: {self.translator_model_name}...")
+            self.translator_tokenizer = NLLBTokenizer.from_pretrained(self.translator_model_name)
+            print(f"NLLB tokenizer type: {type(self.translator_tokenizer)}")
+            print("NLLB tokenizer loaded.")
+
+            print(f"Loading NLLB model config using M2M100Config: {self.translator_model_name}...")
+            translator_config = M2M100Config.from_pretrained(self.translator_model_name)
+            print(f"Explicit NLLB/M2M100 config type: {type(translator_config)}")
+
+            print(f"Loading NLLB model using M2M100ForConditionalGeneration: {self.translator_model_name}...")
+            self.translator_model = M2M100ForConditionalGeneration.from_pretrained(
+                self.translator_model_name,
+                config=translator_config
+            ).to(self.device)
+            print(f"NLLB model type: {type(self.translator_model)}")
+            print("NLLB model loaded.")
+
+            # --- DEBUGGING ---
+            # if self.translator_model and hasattr(self.translator_model, 'config'):
+            #     print(f"NLLB model config type: {type(self.translator_model.config)}") # Should be M2M100Config
+            #     print(f"NLLB model config keys: {list(self.translator_model.config.to_dict().keys())}")
+            #     if hasattr(self.translator_model.config, 'lang_code_to_id'):
+            #         print("SUCCESS: 'lang_code_to_id' FOUND in translator_model.config")
+            #     else:
+            #         print("FAILURE: 'lang_code_to_id' NOT FOUND in translator_model.config")
+            # else:
+            #     print("NLLB model or its config is None after loading attempts.")
+            # --- END DEBUGGING ---
+
         except Exception as e:
-            print(f"Error loading model/tokenizer for {self.model_name}: {e}")
+            print(f"Error loading models: {e}")
+            import traceback
+            traceback.print_exc()
             raise
+        
+    def _translate_text(self, text_to_translate: str, src_nllb_lang: str, tgt_nllb_lang: str) -> str | None:
+        if not self.translator_model or not self.translator_tokenizer:
+            print("Translator model/tokenizer not loaded.")
+            return None
+        if not src_nllb_lang: # This is the NLLB code for the source language
+            print(f"Missing NLLB source language code for translation. Cannot translate.")
+            return text_to_translate # Or None, depending on how you want to handle
+
+        try:
+            # Set the source language for the NLLB tokenizer
+            # This is crucial for NLLB when translating FROM a non-English language
+            self.translator_tokenizer.src_lang = src_nllb_lang
+            
+            inputs = self.translator_tokenizer(
+                text_to_translate, 
+                return_tensors="pt", 
+                truncation=True, 
+                padding=True, # Pad to max_length of model or batch, helps with potential length issues
+                # max_length=512 # Optional: you can set a max_length for the tokenizer input here too
+            ).to(self.device)
+            
+            # Get the target language token ID using convert_tokens_to_ids
+            # This is the method shown in the official documentation
+            try:
+                target_lang_token_id = self.translator_tokenizer.convert_tokens_to_ids(tgt_nllb_lang)
+            except Exception as e_conv:
+                print(f"Error converting target language code '{tgt_nllb_lang}' to ID: {e_conv}")
+                # This might happen if tgt_nllb_lang is not a known special token for the tokenizer.
+                # Ensure your NLLB code mapping produces valid codes recognized by the tokenizer.
+                return None
+
+            if target_lang_token_id == self.translator_tokenizer.unk_token_id:
+                print(f"Warning: Target language code '{tgt_nllb_lang}' was converted to UNK token ID. "
+                        f"This means the tokenizer doesn't recognize it as a language code. Check your mapping.")
+                # Forcing generation to UNK is not useful.
+                return None
+
+            print(f"DEBUG: Source NLLB Lang: {src_nllb_lang}, Target NLLB Lang: {tgt_nllb_lang}, Target Lang Token ID: {target_lang_token_id}")
+
+            generated_tokens = self.translator_model.generate(
+                **inputs,
+                forced_bos_token_id=target_lang_token_id,
+                max_length=1024,
+                repetition_penalty=1.2,
+                no_repeat_ngram_size=3
+            )
+            translated_text = self.translator_tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
+            return translated_text
+        except Exception as e:
+            print(f"Error during translation from {src_nllb_lang} to {tgt_nllb_lang}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def _summarize_english_text(self, text_chunk: str, min_length: int, max_length: int) -> str:
+        inputs = self.pegasus_tokenizer(
+            text_chunk, return_tensors="pt", truncation=True, max_length=self.effective_input_token_limit
+        ).to(self.device)
+        summary_ids = self.pegasus_model.generate(
+            inputs["input_ids"], num_beams=4, min_length=min_length, max_length=max_length, early_stopping=True
+        )
+        summary_text = self.pegasus_tokenizer.decode(summary_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        summary_text = summary_text.replace("<n>", "\n").strip()
+        return summary_text
+    
+    def summarize(self, text: str, min_length_per_chunk: int = 20, max_length_per_chunk: int = 80,
+                      overall_min_length: int = 30, overall_max_length: int = 150) -> dict:
+        """
+        Returns a dictionary containing:
+        {
+            'final_summary': str | None,
+            'detected_language_ld': str | None, (langdetect code)
+            'english_translation': str | None, (if input was non-English)
+            'english_summary': str | None, (summary of the (translated) English text)
+            'error': str | None (if an error occurred)
+        }
+        """
+        # Initialize return dictionary
+        result = {
+            'final_summary': None,
+            'detected_language_ld': None,
+            'english_translation': None,
+            'english_summary': None,
+            'error': None
+        }
+
+        if not all([self.pegasus_model, self.pegasus_tokenizer, self.translator_model, self.translator_tokenizer]):
+            result['error'] = "Error: Core models not loaded."
+            return result
+        if not text.strip():
+            result['error'] = "Error: Input text is empty."
+            return result
+
+        original_text_to_process = text
+        detected_lang_ld, detected_lang_nllb = get_language_code(text)
+        result['detected_language_ld'] = detected_lang_ld
+
+        if not detected_lang_ld:
+            result['error'] = "Error: Could not detect language."
+            return result
+        
+        if detected_lang_ld != 'en' and detected_lang_nllb:
+            print(f"Original language: {detected_lang_ld} ({detected_lang_nllb}). Translating to English...")
+            english_text_translation = self._translate_text(original_text_to_process, detected_lang_nllb, "eng_Latn")
+            if not english_text_translation or english_text_translation.startswith("Error"):
+                result['error'] = f"Error: Translation to English failed for lang {detected_lang_ld}."
+                if english_text_translation: result['error'] += f" ({english_text_translation})" # append translator error
+                return result
+            
+            original_text_to_process = english_text_translation # This is now the English text
+            result['english_translation'] = original_text_to_process
+            print("Translation to English complete.")
+        elif detected_lang_ld != 'en' and not detected_lang_nllb:
+                print(f"Warning: Original language is {detected_lang_ld}, but no NLLB code mapping. Summary will likely be poor or fail.")
+                result['error'] = f"Error: Cannot translate from {detected_lang_ld} due to missing NLLB code mapping. Cannot proceed to summarization."
+                return result
+
+
+        # --- Summarization of English text (original_text_to_process is now English) ---
+        all_input_ids = self.pegasus_tokenizer.encode(original_text_to_process, add_special_tokens=False)
+        total_tokens = len(all_input_ids)
+        english_summary_text = None
+
+        if total_tokens <= self.effective_input_token_limit:
+            english_summary_text = self._summarize_english_text(original_text_to_process, overall_min_length, overall_max_length)
+        else:
+            print(f"Input text for summarizer has {total_tokens} tokens. Applying chunking...")
+            chunk_size = self.effective_input_token_limit - 50 
+            overlap_size = 50 
+            chunks_texts = []
+            start_idx = 0
+            while start_idx < total_tokens:
+                end_idx = min(start_idx + chunk_size, total_tokens)
+                chunk_token_ids = all_input_ids[start_idx:end_idx]
+                chunk_text_for_summary = self.pegasus_tokenizer.decode(chunk_token_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+                chunks_texts.append(chunk_text_for_summary)
+                if end_idx == total_tokens: break
+                start_idx += (chunk_size - overlap_size)
+                if start_idx >= end_idx : break
+            
+            if not chunks_texts:
+                result['error'] = "Error: Failed to create any chunks from the (potentially translated) text."
+                return result
+            
+            chunk_summaries_list = []
+            for i_chunk, chunk_text_to_summarize in enumerate(chunks_texts):
+                print(f"Summarizing (English) chunk {i_chunk+1}/{len(chunks_texts)}...")
+                chunk_sum = self._summarize_english_text(chunk_text_to_summarize, min_length_per_chunk, max_length_per_chunk)
+                if chunk_sum.startswith("Error"): # Check if individual chunk summarization failed
+                    result['error'] = f"Error summarizing chunk {i_chunk+1}: {chunk_sum}"
+                    return result
+                chunk_summaries_list.append(chunk_sum)
+            english_summary_text = " ".join(chunk_summaries_list)
+        
+        if not english_summary_text or english_summary_text.startswith("Error"):
+            result['error'] = f"Error during English summarization: {english_summary_text if english_summary_text else 'Unknown error'}"
+            return result
+        
+        result['english_summary'] = english_summary_text
+
+        # --- Translate summary back ---
+        final_summary_text = english_summary_text
+        if detected_lang_ld != 'en' and detected_lang_nllb:
+            print(f"Translating summary back to {detected_lang_ld} ({detected_lang_nllb})...")
+            translated_summary_back = self._translate_text(english_summary_text, "eng_Latn", detected_lang_nllb)
+            if translated_summary_back and not translated_summary_back.startswith("Error"):
+                final_summary_text = translated_summary_back
+                print("Back-translation complete.")
+            else:
+                print(f"Warning: Back-translation to {detected_lang_ld} failed or returned error. Returning English summary.")
+                if translated_summary_back: print(f"Translator error: {translated_summary_back}")
+        
+        result['final_summary'] = final_summary_text
+        return result
     
     def _summarize_single_chunk(self, text_chunk: str, min_length: int, max_length: int) -> str:
         """Helper function to summarize a single chunk of text."""
@@ -64,95 +370,95 @@ class Summarizer:
             traceback.print_exc()
             return f"[Error summarizing chunk: {e}]"
 
-    def summarize(self, text: str, min_length_per_chunk: int = 20, max_length_per_chunk: int = 80, 
-                  overall_min_length: int = 30, overall_max_length: int = 150) -> str:
-        """
-        Generates a summary for the given English text, using chunking if necessary.
+    # def summarize(self, text: str, min_length_per_chunk: int = 20, max_length_per_chunk: int = 80, 
+    #               overall_min_length: int = 30, overall_max_length: int = 150) -> str:
+    #     """
+    #     Generates a summary for the given English text, using chunking if necessary.
 
-        Args:
-            text (str): The English text to summarize.
-            min_length_per_chunk (int): Min length for summary of each individual chunk.
-            max_length_per_chunk (int): Max length for summary of each individual chunk.
-            overall_min_length (int): Desired min length of the final combined summary (not strictly enforced yet).
-            overall_max_length (int): Desired max length of the final combined summary (not strictly enforced yet).
+    #     Args:
+    #         text (str): The English text to summarize.
+    #         min_length_per_chunk (int): Min length for summary of each individual chunk.
+    #         max_length_per_chunk (int): Max length for summary of each individual chunk.
+    #         overall_min_length (int): Desired min length of the final combined summary (not strictly enforced yet).
+    #         overall_max_length (int): Desired max length of the final combined summary (not strictly enforced yet).
 
-        Returns:
-            str: The generated summary, or an error message if summarization fails.
-        """
-        if not self.model or not self.tokenizer:
-            return "Error: Model and/or tokenizer not loaded."
-        if not text.strip():
-            return "Error: Input text is empty."
+    #     Returns:
+    #         str: The generated summary, or an error message if summarization fails.
+    #     """
+    #     if not self.model or not self.tokenizer:
+    #         return "Error: Model and/or tokenizer not loaded."
+    #     if not text.strip():
+    #         return "Error: Input text is empty."
 
-        # 1. Tokenize the entire text to check its length
-        all_input_ids = self.tokenizer.encode(text, add_special_tokens=False) # Get raw token ID
-        total_tokens = len(all_input_ids)
-        print(f"Total tokens in input text: {total_tokens}")
+    #     # 1. Tokenize the entire text to check its length
+    #     all_input_ids = self.tokenizer.encode(text, add_special_tokens=False) # Get raw token ID
+    #     total_tokens = len(all_input_ids)
+    #     print(f"Total tokens in input text: {total_tokens}")
 
-        # Check if chunking is needed
-        if total_tokens <= self.effective_input_token_limit:
-            print("Input text is within token limit. Summarizing as a single chunk.")
-            return self._summarize_single_chunk(text, overall_min_length, overall_max_length)
-        else:
-            print(f"Input text exceeds token limit ({total_tokens} > {self.effective_input_token_limit}). Applying chunking.")
+    #     # Check if chunking is needed
+    #     if total_tokens <= self.effective_input_token_limit:
+    #         print("Input text is within token limit. Summarizing as a single chunk.")
+    #         return self._summarize_single_chunk(text, overall_min_length, overall_max_length)
+    #     else:
+    #         print(f"Input text exceeds token limit ({total_tokens} > {self.effective_input_token_limit}). Applying chunking.")
             
-            # 2. Create Chunks
-            # currently: split by tokens, with some overlap to maintain context.
-            # improvements: maybe split by sentences or paragraphs using NLTK or spaCy.
+    #         # 2. Create Chunks
+    #         # currently: split by tokens, with some overlap to maintain context.
+    #         # improvements: maybe split by sentences or paragraphs using NLTK or spaCy.
             
-            chunk_size = self.effective_input_token_limit - 50 # Leave some room
-            overlap_size = 50 # Number of tokens to overlap between chunks
+    #         chunk_size = self.effective_input_token_limit - 50 # Leave some room
+    #         overlap_size = 50 # Number of tokens to overlap between chunks
 
-            chunks = []
-            start_idx = 0
-            while start_idx < total_tokens:
-                end_idx = min(start_idx + chunk_size, total_tokens)
-                chunk_token_ids = all_input_ids[start_idx:end_idx]
-                chunk_text = self.tokenizer.decode(chunk_token_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-                chunks.append(chunk_text)
+    #         chunks = []
+    #         start_idx = 0
+    #         while start_idx < total_tokens:
+    #             end_idx = min(start_idx + chunk_size, total_tokens)
+    #             chunk_token_ids = all_input_ids[start_idx:end_idx]
+    #             chunk_text = self.tokenizer.decode(chunk_token_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+    #             chunks.append(chunk_text)
                 
-                if end_idx == total_tokens:
-                    break
-                start_idx += (chunk_size - overlap_size) # Move window forward
-                if start_idx >= end_idx : # Safety break if overlap is too large or chunk_size too small
-                    print("Warning: Chunking logic might have an issue with start/end index. Breaking.")
-                    break
+    #             if end_idx == total_tokens:
+    #                 break
+    #             start_idx += (chunk_size - overlap_size) # Move window forward
+    #             if start_idx >= end_idx : # Safety break if overlap is too large or chunk_size too small
+    #                 print("Warning: Chunking logic might have an issue with start/end index. Breaking.")
+    #                 break
             
-            print(f"Created {len(chunks)} chunks.")
-            if not chunks:
-                return "Error: Failed to create any chunks from the text."
+    #         print(f"Created {len(chunks)} chunks.")
+    #         if not chunks:
+    #             return "Error: Failed to create any chunks from the text."
 
-            # 3. Summarize each chunk
-            chunk_summaries = []
-            for i, chunk_text in enumerate(chunks):
-                print(f"Summarizing chunk {i+1}/{len(chunks)}...")
-                # Adjust min/max length for chunk summaries; they should be shorter
-                chunk_summary = self._summarize_single_chunk(chunk_text, 
-                                                             min_length_per_chunk, 
-                                                             max_length_per_chunk)
-                if not chunk_summary.startswith("[Error"):
-                    chunk_summaries.append(chunk_summary)
-                print(f"Chunk {i+1} summary: {chunk_summary[:100]}...")
+    #         # 3. Summarize each chunk
+    #         chunk_summaries = []
+    #         for i, chunk_text in enumerate(chunks):
+    #             print(f"Summarizing chunk {i+1}/{len(chunks)}...")
+    #             # Adjust min/max length for chunk summaries; they should be shorter
+    #             chunk_summary = self._summarize_single_chunk(chunk_text, 
+    #                                                          min_length_per_chunk, 
+    #                                                          max_length_per_chunk)
+    #             if not chunk_summary.startswith("[Error"):
+    #                 chunk_summaries.append(chunk_summary)
+    #             print(f"Chunk {i+1} summary: {chunk_summary[:100]}...")
 
-            if not chunk_summaries:
-                return "Error: Failed to generate summaries for any chunk."
+    #         if not chunk_summaries:
+    #             return "Error: Failed to generate summaries for any chunk."
 
-            # 4. Combine chunk summaries
-            # Simple concatenation for now.
-            # TODO: This might make the summary too long or repetitive.
-            # Consider a second summarization pass (hierarchical) in the future.
-            final_summary = " ".join(chunk_summaries)
+    #         # 4. Combine chunk summaries
+    #         # Simple concatenation for now.
+    #         # TODO: This might make the summary too long or repetitive.
+    #         # Consider a second summarization pass (hierarchical) in the future.
+    #         final_summary = " ".join(chunk_summaries)
             
-            # Optional: A very naive truncation of the combined summary if it's too long
-            # A better approach would be to summarize the combined summaries.
-            if len(self.tokenizer.encode(final_summary)) > overall_max_length + 50 : # +50 as buffer
-                 print(f"Combined summary is too long. Truncating naively. Consider hierarchical summarization.")
-                 # This is a crude way to truncate. Better to summarize the summaries.
-                 # For now, let's just return it, or truncate by tokens
-                 final_summary_tokens = self.tokenizer.encode(final_summary, truncation=True, max_length=overall_max_length)
-                 final_summary = self.tokenizer.decode(final_summary_tokens, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+    #         # Optional: A very naive truncation of the combined summary if it's too long
+    #         # A better approach would be to summarize the combined summaries.
+    #         if len(self.tokenizer.encode(final_summary)) > overall_max_length + 50 : # +50 as buffer
+    #              print(f"Combined summary is too long. Truncating naively. Consider hierarchical summarization.")
+    #              # This is a crude way to truncate. Better to summarize the summaries.
+    #              # For now, let's just return it, or truncate by tokens
+    #              final_summary_tokens = self.tokenizer.encode(final_summary, truncation=True, max_length=overall_max_length)
+    #              final_summary = self.tokenizer.decode(final_summary_tokens, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
-            return final_summary.strip()
+    #         return final_summary.strip()
 
 if __name__ == "__main__":
     print("Testing Summarizer Engine...")
