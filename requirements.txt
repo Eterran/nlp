@@ -3,3 +3,4 @@ torch
 protobuf
 sentencepiece
 streamlit
+langdetect
