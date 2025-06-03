@@ -4,3 +4,5 @@ protobuf
 sentencepiece
 streamlit
 langdetect
+datasets
+rouge-score
