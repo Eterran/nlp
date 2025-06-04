@@ -107,7 +107,13 @@ def show_summarizer_page():
                     st.exception(traceback.format_exc())
 
     st.markdown("---")
-    st.markdown("Powered by google/pegasus-cnn_dailymail.")
+    st.markdown(
+        "<div style='text-align: center; color: #666; font-size: 16px;'>"
+        "Powered by google/pegasus-cnn_dailymail<br>"
+        "<strong>Made by Group 31:</strong> Loh Lit Hoong, John Ong Ming Hom, Liew Jin Sze, Kueh Pang Lang"
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def main():
@@ -129,7 +135,9 @@ def main():
         st.markdown("---")
         st.markdown("**About this App:**")
         st.markdown("• Multilingual news summarization")
-        st.markdown("• Powered by Pegasus & NLLB-200")
+        st.markdown(
+            "• Powered by [Pegasus](https://huggingface.co/google/pegasus-cnn_dailymail) & [NLLB-200](https://huggingface.co/facebook/nllb-200-distilled-600M)"
+        )
         st.markdown("• Evaluation with ROUGE metrics")
 
     # Display selected page
