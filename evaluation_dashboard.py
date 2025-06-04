@@ -12,11 +12,11 @@ def load_evaluation_data():
     """Load evaluation results from CSV files."""
     try:
         # Load English results
-        df_en = pd.read_csv('evaluation_results_en.csv')
-        
-        # Load French results  
-        df_fr = pd.read_csv('evaluation_results_fr.csv')
-        
+        df_en = pd.read_csv("evaluation_results_en.csv")
+
+        # Load French results
+        df_fr = pd.read_csv("evaluation_results_fr.csv")
+
         return df_en, df_fr
     except FileNotFoundError as e:
         st.error(f"Could not load evaluation files: {e}")
@@ -26,71 +26,64 @@ def load_evaluation_data():
 def display_summary_metrics(df: pd.DataFrame, title: str):
     """Display summary metrics in a highlighted card format."""
     # Get summary row (last row with sample_id = 'SUMMARY')
-    summary_row = df[df['sample_id'] == 'SUMMARY'].iloc[0] if len(df[df['sample_id'] == 'SUMMARY']) > 0 else None
-    
+    summary_row = (
+        df[df["sample_id"] == "SUMMARY"].iloc[0]
+        if len(df[df["sample_id"] == "SUMMARY"]) > 0
+        else None
+    )
+
     if summary_row is not None:
         st.markdown(f"### 📊 {title} - Summary Results")
-        
-        # Create metrics columns
-        col1, col2, col3, col4 = st.columns(4)
-        
+
+        # Create metrics columns with ample spacing
+        col1, col2, col3 = st.columns([1, 1, 1])
+
         with col1:
             st.metric(
-                label="Success Rate",
-                value=summary_row['generated_summary'],  # Contains "Success Rate: 100.0%"
-                delta=None
+                label="ROUGE-1", value=f"{summary_row['rouge1_f']:.4f}", delta=None
             )
-        
+
         with col2:
             st.metric(
-                label="ROUGE-1",
-                value=f"{summary_row['rouge1_f']:.4f}",
-                delta=None
+                label="ROUGE-2", value=f"{summary_row['rouge2_f']:.4f}", delta=None
             )
-            
+
         with col3:
             st.metric(
-                label="ROUGE-2", 
-                value=f"{summary_row['rouge2_f']:.4f}",
-                delta=None
+                label="ROUGE-L", value=f"{summary_row['rougeL_f']:.4f}", delta=None
             )
-            
-        with col4:
-            st.metric(
-                label="ROUGE-L",
-                value=f"{summary_row['rougeL_f']:.4f}",
-                delta=None
-            )
-        
+
         st.markdown("---")
 
 
-def display_paginated_table(df: pd.DataFrame, columns_to_show: list, page_size: int = 15):
+def display_paginated_table(
+    df: pd.DataFrame, columns_to_show: list, page_size: int = 15
+):
     """Display a paginated table with the specified columns."""
     # Filter out summary row for the detailed table
-    df_filtered = df[df['sample_id'] != 'SUMMARY'].copy()
+    df_filtered = df[df["sample_id"] != "SUMMARY"].copy()
     df_display = df_filtered[columns_to_show].copy()
-    
+
     # Rename columns for better display
     column_rename = {
-        'sample_id': 'Sample ID',
-        'rouge1_f': 'ROUGE-1',
-        'rouge2_f': 'ROUGE-2', 
-        'rougeL_f': 'ROUGE-L',
-        'reference_summary': 'Reference Summary',
-        'generated_summary': 'Generated Summary'
+        "sample_id": "Sample ID",
+        "rouge1_f": "ROUGE-1",
+        "rouge2_f": "ROUGE-2",
+        "rougeL_f": "ROUGE-L",
+        "reference_summary": "Reference Summary",
+        "generated_summary": "Generated Summary",
     }
     df_display = df_display.rename(columns=column_rename)
-    
+
     # Format ROUGE scores to 4 decimal places
-    for col in ['ROUGE-1', 'ROUGE-2', 'ROUGE-L']:
+    for col in ["ROUGE-1", "ROUGE-2", "ROUGE-L"]:
         if col in df_display.columns:
             df_display[col] = df_display[col].apply(lambda x: f"{x:.4f}")
-    
+
     # Calculate pagination
     total_rows = len(df_display)
     total_pages = math.ceil(total_rows / page_size)
-    
+
     if total_pages > 1:
         # Page selector
         col1, col2, col3 = st.columns([1, 2, 1])
@@ -99,18 +92,18 @@ def display_paginated_table(df: pd.DataFrame, columns_to_show: list, page_size: 
                 "Select Page",
                 range(1, total_pages + 1),
                 format_func=lambda x: f"Page {x} of {total_pages}",
-                key="page_selector"
+                key="page_selector",
             )
     else:
         page = 1
-    
+
     # Calculate start and end indices
     start_idx = (page - 1) * page_size
     end_idx = min(start_idx + page_size, total_rows)
-    
+
     # Display page info
     st.caption(f"Showing rows {start_idx + 1}-{end_idx} of {total_rows}")
-    
+
     # Display the table
     df_page = df_display.iloc[start_idx:end_idx]
     st.dataframe(
@@ -119,26 +112,21 @@ def display_paginated_table(df: pd.DataFrame, columns_to_show: list, page_size: 
         hide_index=True,
         column_config={
             "Reference Summary": st.column_config.TextColumn(
-                width="medium",
-                help="Ground truth summary from the dataset"
+                width="medium", help="Ground truth summary from the dataset"
             ),
             "Generated Summary": st.column_config.TextColumn(
-                width="medium", 
-                help="Summary generated by our model"
+                width="medium", help="Summary generated by our model"
             ),
             "ROUGE-1": st.column_config.NumberColumn(
-                help="ROUGE-1 F1 score",
-                format="%.4f"
+                help="ROUGE-1 F1 score", format="%.4f"
             ),
             "ROUGE-2": st.column_config.NumberColumn(
-                help="ROUGE-2 F1 score", 
-                format="%.4f"
+                help="ROUGE-2 F1 score", format="%.4f"
             ),
             "ROUGE-L": st.column_config.NumberColumn(
-                help="ROUGE-L F1 score",
-                format="%.4f"
-            )
-        }
+                help="ROUGE-L F1 score", format="%.4f"
+            ),
+        },
     )
 
 
@@ -146,106 +134,152 @@ def display_benchmark_table():
     """Display the official Pegasus benchmark results."""
     st.markdown("### 🏆 Official Google Pegasus Benchmark Results")
     st.markdown("*ROUGE scores in format: ROUGE-1/ROUGE-2/ROUGE-L*")
-    
+
     # Create the benchmark data
     benchmark_data = {
-        'Dataset': ['xsum', 'cnn_dailymail', 'newsroom', 'multi_news', 'gigaword'],
-        'C4': ['45.20/22.06/36.99', '43.90/21.20/40.76', '45.07/33.39/41.28', '46.74/17.95/24.26', '38.75/19.96/36.14'],
-        'HugeNews': ['47.21/24.56/39.25', '44.17/21.47/41.11', '45.15/33.51/41.33', '47.52/18.72/24.91', '39.12/19.86/36.24'],
-        'Mixed & Stochastic': ['47.60/24.83/39.64', '44.16/21.56/41.30', '45.98/34.20/42.18', '47.65/18.75/24.95', '39.65/20.47/36.76']
+        "Dataset": ["xsum", "cnn_dailymail", "newsroom", "multi_news", "gigaword"],
+        "C4": [
+            "45.20/22.06/36.99",
+            "43.90/21.20/40.76",
+            "45.07/33.39/41.28",
+            "46.74/17.95/24.26",
+            "38.75/19.96/36.14",
+        ],
+        "HugeNews": [
+            "47.21/24.56/39.25",
+            "44.17/21.47/41.11",
+            "45.15/33.51/41.33",
+            "47.52/18.72/24.91",
+            "39.12/19.86/36.24",
+        ],
+        "Mixed & Stochastic": [
+            "47.60/24.83/39.64",
+            "44.16/21.56/41.30",
+            "45.98/34.20/42.18",
+            "47.65/18.75/24.95",
+            "39.65/20.47/36.76",
+        ],
     }
-    
+
     df_benchmark = pd.DataFrame(benchmark_data)
-    
+
     st.dataframe(
         df_benchmark,
         use_container_width=True,
         hide_index=True,
         column_config={
             "Dataset": st.column_config.TextColumn(
-                width="medium",
-                help="Evaluation dataset"
+                width="medium", help="Evaluation dataset"
             ),
             "C4": st.column_config.TextColumn(
-                width="medium",
-                help="C4 pre-training configuration"
+                width="medium", help="C4 pre-training configuration"
             ),
             "HugeNews": st.column_config.TextColumn(
-                width="medium",
-                help="HugeNews pre-training configuration"
+                width="medium", help="HugeNews pre-training configuration"
             ),
             "Mixed & Stochastic": st.column_config.TextColumn(
-                width="medium", 
-                help="Mixed & Stochastic pre-training configuration"
-            )
-        }
+                width="medium", help="Mixed & Stochastic pre-training configuration"
+            ),
+        },
     )
-    
-    # Add note about CNN/DailyMail comparison
-    st.info("💡 **Note**: Our CNN/DailyMail results can be compared with the official benchmark scores above (cnn_dailymail row).")
 
 
-def main():
-    """Main dashboard function."""
-    st.set_page_config(
-        page_title="Evaluation Results Dashboard",
-        page_icon="📊",
-        layout="wide"
-    )
-    
+def show_evaluation_page():
+    """Evaluation dashboard page function for navigation."""
     st.title("📊 Evaluation Results Dashboard")
-    st.markdown("*Comprehensive evaluation results for the Multilingual News Article Summarizer*")
+    st.markdown(
+        "*Comprehensive evaluation results for the Multilingual News Article Summarizer*"
+    )
     st.markdown("---")
-    
+
     # Load data
     df_en, df_fr = load_evaluation_data()
-    
+
     if df_en is None or df_fr is None:
-        st.error("⚠️ Could not load evaluation data. Please ensure evaluation CSV files are present.")
-        return
-    
-    # Create selection buttons
+        st.error(
+            "⚠️ Could not load evaluation data. Please ensure evaluation CSV files are present."
+        )
+        return  # Create selection dropdown
     st.markdown("### 🔍 Select Evaluation Results to View")
-    
-    # Use radio buttons for exclusive selection
-    option = st.radio(
+
+    # Use dropdown for clean, modern selection
+    option = st.selectbox(
         "Choose an option:",
         [
             "🏆 Official Google Pegasus Benchmark Results",
-            "🇺🇸 Our English Evaluation (CNN/DailyMail)", 
-            "🇫🇷 Our French Evaluation (MLSUM)"
+            "🇺🇸 Our English Evaluation (CNN/DailyMail)",
+            "🇫🇷 Our French Evaluation (MLSUM)",
         ],
         index=0,
-        key="evaluation_option"
+        key="evaluation_option",
     )
-    
-    st.markdown("---")
-    
-    # Display content based on selection
+
+    st.markdown("---")  # Display content based on selection
     if option == "🏆 Official Google Pegasus Benchmark Results":
         display_benchmark_table()
-        
+
+        # Page-specific disclaimer
+        st.markdown("---")
+        st.info(
+            "📖 **Additional Information**: For more details about the Pegasus model, visit the [official HuggingFace model page](https://huggingface.co/google/pegasus-cnn_dailymail)."
+        )
+
     elif option == "🇺🇸 Our English Evaluation (CNN/DailyMail)":
         # Display summary metrics first
         display_summary_metrics(df_en, "English (CNN/DailyMail)")
-        
+
         # Display detailed results
         st.markdown("### 📝 Detailed Sample Results")
-        columns_to_show = ['sample_id', 'rouge1_f', 'rouge2_f', 'rougeL_f', 'reference_summary', 'generated_summary']
+        columns_to_show = [
+            "sample_id",
+            "rouge1_f",
+            "rouge2_f",
+            "rougeL_f",
+            "reference_summary",
+            "generated_summary",
+        ]
         display_paginated_table(df_en, columns_to_show)
-        
+
+        # Page-specific disclaimer
+        st.markdown("---")
+        st.warning(
+            "⚠️ **Disclaimer**: ROUGE scores shown are based on a small test set of 25 articles per dataset, due to time and computational constraints. These results are indicative but not fully representative. Performance is expected to improve with larger, more comprehensive test sets."
+        )
+        st.info(
+            "📖 **Dataset Information**: For more details about the CNN/DailyMail dataset used in this evaluation, visit the [official dataset page](https://huggingface.co/datasets/abisee/cnn_dailymail)."
+        )
+
     elif option == "🇫🇷 Our French Evaluation (MLSUM)":
-        # Display summary metrics first  
+        # Display summary metrics first
         display_summary_metrics(df_fr, "French (MLSUM)")
-        
+
         # Display detailed results
-        st.markdown("### 📝 Detailed Sample Results") 
-        columns_to_show = ['sample_id', 'rouge1_f', 'rouge2_f', 'rougeL_f', 'reference_summary', 'generated_summary']
-        display_paginated_table(df_fr, columns_to_show)
-    
-    # Footer
-    st.markdown("---")
-    st.markdown("*Dashboard powered by Streamlit • Evaluation conducted on 25 samples per language*")
+        st.markdown("### 📝 Detailed Sample Results")
+        columns_to_show = [
+            "sample_id",
+            "rouge1_f",
+            "rouge2_f",
+            "rougeL_f",
+            "reference_summary",
+            "generated_summary",
+        ]
+        display_paginated_table(df_fr, columns_to_show)  # Page-specific disclaimer
+        st.markdown("---")
+        st.warning(
+            "⚠️ **Disclaimer**: Evaluations for non-English summaries (e.g., French) tend to be lower than for English ones primarily due to cascading errors introduced during the machine translation step. Our translation model, while generally good, is a distilled, research-focused version and not intended for production deployment. This means it can struggle with the nuances of news articles, introducing inaccuracies or losing subtle context. These translation imperfections are then amplified when fed into the English-optimized summarization model, often resulting in less precise content in the final summary. For more details about the translation model limitations and specifications, visit the [NLLB-200 distilled model page](https://huggingface.co/facebook/nllb-200-distilled-600M)."
+        )
+        st.info(
+            "📖 **Dataset Information**: For more details about the MLSUM dataset used in this evaluation, visit the [official dataset page](https://huggingface.co/datasets/reciTAL/mlsum)."
+        )
+
+
+# For backwards compatibility when run directly
+def main():
+    """Main function for backwards compatibility."""
+    st.set_page_config(
+        page_title="Evaluation Results Dashboard", page_icon="📊", layout="wide"
+    )
+    show_evaluation_page()
 
 
 if __name__ == "__main__":
