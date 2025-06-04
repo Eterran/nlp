@@ -1,0 +1,95 @@
+sample_id,dataset,language,success,error,rouge1_f,rouge2_f,rougeL_f,detected_language,reference_summary,generated_summary
+1,cnn_dailymail,en,True,,0.39999999999999997,0.22727272727272727,0.33333333333333337,en,"Membership gives the ICC jurisdiction over alleged crimes committed in Palestinian territories since last June .
+Israel and the United States opposed the move, which could open the door to war crimes ...","The Palestinian Authority officially becomes the 123rd member of the International Criminal Court.
+The move gives the court jurisdiction over alleged crimes in Palestinian territories. The United Stat..."
+2,cnn_dailymail,en,True,,0.4888888888888889,0.31818181818181823,0.4444444444444445,en,"Theia, a bully breed mix, was apparently hit by a car, whacked with a hammer and buried in a field .
+""She's a true miracle dog and she deserves a good life,"" says Sara Mellado, who is looking for a ho...","Theia, a white-and-black bully breed mix, was apparently hit by a car and buried in a field.
+Four days later, she staggered to a nearby farm and was taken in by a worker.
+She's been treated at Washing..."
+3,cnn_dailymail,en,True,,0.4672897196261682,0.24761904761904763,0.26168224299065423,en,"Mohammad Javad Zarif has spent more time with John Kerry than any other foreign minister .
+He once participated in a takeover of the Iranian Consulate in San Francisco .
+The Iranian foreign minister t...","Mohammad Javad Zarif is the Iranian foreign minister.
+He has been the U.S. secretary of state's opposite number in nuclear talks. Iranian Foreign Minister Javad Zarif and U.S. Secretary of State John ..."
+4,cnn_dailymail,en,True,,0.3561643835616438,0.16901408450704225,0.24657534246575344,en,"17 Americans were exposed to the Ebola virus while in Sierra Leone in March .
+Another person was diagnosed with the disease and taken to hospital in Maryland .
+National Institutes of Health says the p...","One of the five had a heart-related issue on Saturday and has been discharged but hasn't left the area.
+They were exposed to Ebola in Sierra Leone in March."
+5,cnn_dailymail,en,True,,0.3611111111111111,0.1142857142857143,0.2222222222222222,en,"Student is no longer on Duke University campus and will face disciplinary review .
+School officials identified student during investigation and the person admitted to hanging the noose, Duke says .
+Th...","A student has admitted to hanging a noose from a tree near a student union, Duke says.
+The prestigious private school didn't identify the student, citing federal privacy laws."
+6,cnn_dailymail,en,True,,0.22988505747126436,0.07058823529411765,0.1839080459770115,en,"College-bound basketball star asks girl with Down syndrome to high school prom .
+Pictures of the two during the ""prom-posal"" have gone viral .","Trey Moses is a star high school basketball player in Louisville, Kentucky.
+He made the prom-posal in Ellie Meredith's P.E. class.
+""That's the kind of person Trey is,"" a teacher says. Trey's future co..."
+7,cnn_dailymail,en,True,,0.36363636363636365,0.13793103448275862,0.21590909090909088,en,"Amnesty's annual death penalty report catalogs encouraging signs, but setbacks in numbers of those sentenced to death .
+Organization claims that governments around the world are using the threat of te...","Amnesty International's annual death penalty report says number of executions fell by 22% in 2014.
+But mass-sentencing cases increased by 28% globally last year.
+Pakistan, China and Egypt are cited as..."
+8,cnn_dailymail,en,True,,0.358974358974359,0.15789473684210528,0.33333333333333337,en,"Andrew Getty's death appears to be from natural causes, police say, citing coroner's early assessment .
+In a petition for a restraining order, Getty had written he had a serious medical condition.
+Pol...","Andrew Getty appears to have died of natural causes, police say.
+Coroner's preliminary assessment is there was no foul play involved, detective says.
+The 47-year-old had ""several health issues,"" detec..."
+9,cnn_dailymail,en,True,,0.23076923076923078,0.08,0.15384615384615385,en,"Once a super typhoon, Maysak is now a tropical storm with 70 mph winds .
+It could still cause flooding, landslides and other problems in the Philippines .","Tropical storm Maysak is centered 200 miles southwest of Aurora province.
+It's expected to make landfall Sunday morning on the southeastern coast of Isabela province."
+10,cnn_dailymail,en,True,,0.5365853658536586,0.30769230769230765,0.3902439024390244,en,"Bob Barker returned to host ""The Price Is Right"" on Wednesday .
+Barker, 91, had retired as host in 2007 .","Barker hosted ""The Price Is Right"" for 35 years before stepping down in 2007.
+He returned to the show on April 1."
+11,cnn_dailymail,en,True,,0.24242424242424243,0.0625,0.18181818181818182,en,"London's Metropolitan Police say the man was arrested at Luton airport after landing on a flight from Istanbul .
+He's been charged with terror offenses allegedly committed since the start of November ...","Yahya Rashid is charged with engaging in conduct in preparation of acts of terrorism.
+He's also charged with engaging in conduct with the intention of assisting others to commit acts of terrorism."
+12,cnn_dailymail,en,True,,0.2765957446808511,0.10869565217391305,0.19148936170212763,en,"""Furious 7"" pays tribute to star Paul Walker, who died during filming .
+Vin Diesel: ""This movie is more than a movie""
+""Furious 7"" opens Friday .","Paul Walker died in a car crash while filming ""Furious 7""
+Fans have been paying tribute to the late actor. A week after Walker's death, about 5,000 people attended an outdoor memorial to him in Los An..."
+13,cnn_dailymail,en,True,,0.31775700934579443,0.15238095238095237,0.205607476635514,en,"Museum: Anne Frank died earlier than previously believed .
+Researchers re-examined archives and testimonies of survivors .
+Anne and older sister Margot Frank are believed to have died in February 1945...","Anne Frank died of typhus in a Nazi concentration camp at the age of 15.
+Two weeks after her supposed death, the Bergen-Belsen camp was liberated.
+New research shows Anne and her older sister, Margot ..."
+14,cnn_dailymail,en,True,,0.2346368715083799,0.03389830508474576,0.1340782122905028,en,"LZ: Indiana law pushing back LGBT rights, and other states' anti-LGBT moves, bow to far right wing that GOP candidates need for 2016 .
+Cruz, Huckabee, Jindal, Carson, Walker are reviving culture wars,...","Indiana Gov. Mike Pence signed a religious freedom law last week that opens the door to discrimination against gays and lesbians.
+John Avlon: The law was Pence's way of shoring up his street cred with..."
+15,cnn_dailymail,en,True,,0.37209302325581395,0.1951219512195122,0.37209302325581395,en,"Singing the national anthem is a risky proposition .
+Whitney Houston nailed it; Roseanne Barr destroyed it .","Mtley Cre's Vince Neil sang the national anthem at a Las Vegas football game.
+Whitney Houston, Roseanne Barr and Jimi Hendrix have all butchered the song."
+16,cnn_dailymail,en,True,,0.15384615384615383,0.01111111111111111,0.07692307692307691,en,"While Republican Gov. Asa Hutchinson was weighing an Arkansas religious freedom bill, Walmart voiced its opposition .
+Walmart and other high-profile businesses are showing their support for gay and le...","Walmart's opposition to a religious freedom law in its home state of Arkansas resonated most deeply.
+The company is emerging as a bellwether for shifting public opinion on hot-button political issues...."
+17,cnn_dailymail,en,True,,0.30158730158730157,0.17741935483870966,0.253968253968254,en,"Amnesty International releases its annual review of the death penalty worldwide; much of it makes for grim reading .
+Salil Shetty: Countries that use executions to deal with problems are on the wrong ...","Amnesty International releases its annual review of the death penalty worldwide.
+In Pakistan, the government lifted a six-year moratorium on the execution of civilians.
+A sharp spike in death sentence..."
+18,cnn_dailymail,en,True,,0.26666666666666666,0.10762331838565023,0.1688888888888889,en,"Marseille prosecutor says ""so far no videos were used in the crash investigation"" despite media reports .
+Journalists at Bild and Paris Match are ""very confident"" the video clip is real, an editor say...","""So far no videos were used in the crash investigation,"" Marseille prosecutor Brice Robin says.
+Paris Match and Bild report that a cell phone video was found at the crash site.
+The publications descri..."
+19,cnn_dailymail,en,True,,0.33644859813084116,0.11428571428571428,0.24299065420560745,en,"The Rev. Robert Schuller, 88, had been diagnosed with esophageal cancer in 2013 .
+His TV show, ""Hour of Power,"" was enormously popular in the 1970s and 1980s .","Schuller was diagnosed with esophageal cancer in August 2013.
+He was born in an Iowa farmhouse without running water. Schuller began broadcasting ""Hour of Power"" in 1970.
+The show, which ran for decad..."
+20,cnn_dailymail,en,True,,0.30303030303030304,0.03125,0.18181818181818182,en,"Former GOP representative compares President Obama to Andreas Lubitz .
+Bachmann said with possible Iran deal, Obama will fly ""entire nation into the rocks""
+Reaction on social media? She was blasted by...","""With his Iran deal, Barack Obama is for the 300 million souls of the United States,"" she wrote.
+Bachmann is no stranger to voicing her opinion on the President's dealing with Iran."
+21,cnn_dailymail,en,True,,0.3503649635036496,0.16296296296296298,0.24817518248175185,en,"Father: ""I know he went through what he went through""
+Louis Jordan was found on his sailboat, which was listing and in bad shape, rescuer says .
+He appears to be in good shape, physically and mentally...","Louis Jordan, 37, left Conway, South Carolina, to fish in the ocean.
+Just a few days into his trip, a storm capsized his boat and broke his mast. The Coast Guard says it has found no reason to doubt J..."
+22,cnn_dailymail,en,True,,0.24858757062146897,0.057142857142857134,0.1581920903954802,en,"Richard Klass: Iran framework agreement on nukes is strong, but opponents will cast doubts on this and try to obscure its facts .
+He says the deal would cut uranium stockpile, centrifuges, implement r...","U.S., Iran reach framework deal to limit Iran's nuclear program.
+Aaron Miller: Opponents will likely raise questions about the agreement. David Rothkopf: Some in Congress are skeptical of Iran nuclear..."
+23,cnn_dailymail,en,True,,0.3178807947019867,0.053691275167785234,0.15894039735099336,en,"Americans paid more for some fruits and vegetables last year because of the drought .
+Tourists will now have to ask for a glass of water at a California restaurant .
+Perhaps the only good thing is ano...","California is a breadbasket to the nation, growing more than a third of its vegetables and nearly two-thirds of its fruits and nuts.
+The historic California drought hurts the rest of the union, too. T..."
+24,cnn_dailymail,en,True,,0.711864406779661,0.5614035087719298,0.4067796610169491,en,"The FBI cites social media messages sent by Keonna Thomas, 30 .
+She's accused of trying to travel overseas to join ISIS .
+Thomas is one of three women facing federal terror charges this week .","Keonna Thomas is one of three women arrested this week on terror charges.
+She's accused of trying to travel overseas to fight for ISIS."
+25,cnn_dailymail,en,True,,0.4074074074074074,0.2692307692307692,0.37037037037037035,en,"Iranian sports official: The ban will be lifted for some events in the coming year .
+But he says ""families are not interested in attending"" some sports matches .","Deputy Sports Minister Abdolhamid Ahmadi says the ban will be lifted for some events.
+It isn't clear exactly which games women will be able to attend."
+SUMMARY,cnn_dailymail,en,25/25,,0.34537982149532837,0.15716789755737007,0.24550524500330861,,AVERAGE SCORES,Success Rate: 100.0%

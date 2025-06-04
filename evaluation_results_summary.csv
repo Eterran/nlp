@@ -1,0 +1,3 @@
+dataset,language,total_samples,successful_evaluations,success_rate,avg_rouge1_f,avg_rouge2_f,avg_rougeL_f,error
+cnn_dailymail,en,25,25,1.0,0.34537982149532837,0.15716789755737007,0.24550524500330861,
+mlsum,fr,25,25,1.0,0.2700516095775533,0.07993708060322793,0.1823557191602453,
