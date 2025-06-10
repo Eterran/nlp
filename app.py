@@ -28,19 +28,21 @@ def show_summarizer_page():
     col1, col2 = st.columns(2)
     with col1:
         min_summary_length = st.slider(
-            "Minimum Final Summary Length:",
-            min_value=10,
+            "Minimum Final Summary Length (optional):",
+            min_value=0,
             max_value=150,
-            value=30,
+            value=0,
             step=5,
+            help="Set to 0 to let the model decide."
         )
     with col2:
         max_summary_length = st.slider(
-            "Maximum Final Summary Length:",
-            min_value=50,
+            "Maximum Final Summary Length (optional):",
+            min_value=0,
             max_value=500,
-            value=150,
+            value=0,
             step=10,
+            help="Set to 0 to let the model decide."
         )
 
     show_intermediate = st.checkbox(
@@ -55,11 +57,14 @@ def show_summarizer_page():
                 "Processing and generating summary... This can take a while for long non-English texts."
             ):
                 try:
+                    # Convert 0 to None before passing to the summarizer
+                    effective_min_length = None if min_summary_length == 0 else min_summary_length
+                    effective_max_length = None if max_summary_length == 0 else max_summary_length
+
                     summary_results = summarizer.summarize(
                         article_text,
-                        overall_min_length=min_summary_length,
-                        overall_max_length=max_summary_length,
-                        # min/max_length_per_chunk are using defaults from engine
+                        overall_min_length=effective_min_length,
+                        overall_max_length=effective_max_length,
                     )
 
                     if summary_results.get('error'):
@@ -131,6 +136,37 @@ def main():
     st.set_page_config(
         page_title="Multilingual News Summarizer", page_icon="📰", layout="wide"
     )
+
+    custom_font_css = """
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&display=swap');
+
+        /* Apply to general elements first */
+        html, body, [class*="st-"],
+        .stTextArea textarea, .stTextInput input,
+        .stButton button, .stSelectbox select, .stSlider label,
+        p, span, div, li /* Common text holding elements */
+        {
+            font-family: 'Oswald', sans-serif;
+        }
+
+        /* Specifically target headings, with !important */
+        h1, h2, h3, h4, h5, h6,
+        [data-testid="stAppViewContainer"] h1, /* Main page title */
+        [data-testid="stAppViewContainer"] h2,
+        [data-testid="stAppViewContainer"] h3,
+        [data-testid="stSidebarContent"] h1, /* Sidebar title */
+        [data-testid="stSidebarContent"] h2,
+        [data-testid="stSidebarContent"] h3,
+        div[data-testid="stHeading"] > h1, /* For st.title() */
+        div[data-testid="stHeading"] > h2, /* For st.header() */
+        div[data-testid="stHeading"] > h3  /* For st.subheader() */
+        {
+            font-family: 'Oswald', sans-serif !important;
+        }
+    </style>
+    """
+    st.markdown(custom_font_css, unsafe_allow_html=True)
 
     # Navigation sidebar
     with st.sidebar:

@@ -148,8 +148,8 @@ def get_language_code(text: str) -> tuple[str | None, str | None, float | None, 
 
 class Summarizer:
     def __init__(self, 
-                 summarizer_model_name="google/pegasus-cnn_dailymail", # "facebook/mbart-large-50"
-                 translator_model_name="facebook/nllb-200-distilled-600M"): # NLLB model
+                 summarizer_model_name="google/pegasus-cnn_dailymail",
+                 translator_model_name="facebook/nllb-200-distilled-1.3B"): # NLLB model
         
         self.summarizer_model_name = summarizer_model_name
         self.translator_model_name = translator_model_name
@@ -164,10 +164,13 @@ class Summarizer:
 
         if "pegasus" in self.summarizer_model_name.lower():
             self.effective_input_token_limit = 512
-        elif "bart" in self.summarizer_model_name.lower():
-            self.effective_input_token_limit = 1024
-        else:
+        # elif "bart" in self.summarizer_model_name.lower(): # mbart is a bart model
+        #     self.effective_input_token_limit = 1024
+        else: # Default
             self.effective_input_token_limit = 512
+        
+        # Add effective input token limit for the translator model
+        self.translator_effective_input_token_limit = 500
         
         self._load_models()
 
@@ -219,50 +222,138 @@ class Summarizer:
         if not self.translator_model or not self.translator_tokenizer:
             print("Translator model/tokenizer not loaded.")
             return None
-        if not src_nllb_lang: # This is the NLLB code for the source language
+        if not src_nllb_lang:
             print(f"Missing NLLB source language code for translation. Cannot translate.")
-            return text_to_translate # Or None, depending on how you want to handle
+            return text_to_translate # Keep original behavior
+
+        if not text_to_translate.strip():
+            return "" # Handle empty string input explicitly
+
+        token_limit = self.translator_effective_input_token_limit
 
         try:
             # Set the source language for the NLLB tokenizer
-            # This is crucial for NLLB when translating FROM a non-English language
             self.translator_tokenizer.src_lang = src_nllb_lang
             
-            inputs = self.translator_tokenizer(
-                text_to_translate, 
-                return_tensors="pt", 
-                truncation=True, 
-                padding=True, # Pad to max_length of model or batch, helps with potential length issues
-                # max_length=512 # Optional: you can set a max_length for the tokenizer input here too
-            ).to(self.device)
-            
-            # Get the target language token ID using convert_tokens_to_ids
-            # This is the method shown in the official documentation
-            try:
-                target_lang_token_id = self.translator_tokenizer.convert_tokens_to_ids(tgt_nllb_lang)
-            except Exception as e_conv:
-                print(f"Error converting target language code '{tgt_nllb_lang}' to ID: {e_conv}")
-                # This might happen if tgt_nllb_lang is not a known special token for the tokenizer.
-                # Ensure your NLLB code mapping produces valid codes recognized by the tokenizer.
-                return None
+            all_input_ids = self.translator_tokenizer.encode(text_to_translate, add_special_tokens=False)
+            total_tokens = len(all_input_ids)
 
-            if target_lang_token_id == self.translator_tokenizer.unk_token_id:
-                print(f"Warning: Target language code '{tgt_nllb_lang}' was converted to UNK token ID. "
-                        f"This means the tokenizer doesn't recognize it as a language code. Check your mapping.")
-                # Forcing generation to UNK is not useful.
-                return None
+            if total_tokens == 0:
+                print(f"Warning: Text resulted in 0 tokens after encoding. Original text (first 100 chars): '{text_to_translate[:100]}...'")
+                return ""
 
-            print(f"DEBUG: Source NLLB Lang: {src_nllb_lang}, Target NLLB Lang: {tgt_nllb_lang}, Target Lang Token ID: {target_lang_token_id}")
+            translated_parts = []
 
-            generated_tokens = self.translator_model.generate(
-                **inputs,
-                forced_bos_token_id=target_lang_token_id,
-                max_length=1024,
-                repetition_penalty=1.2,
-                no_repeat_ngram_size=3
-            )
-            translated_text = self.translator_tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
-            return translated_text
+            if total_tokens <= token_limit:
+                print(f"DEBUG: Translating text as a single chunk ({total_tokens} tokens).")
+                inputs = self.translator_tokenizer(
+                    text_to_translate, 
+                    return_tensors="pt", 
+                    truncation=True, 
+                    padding=True,
+                    max_length=token_limit 
+                ).to(self.device)
+                
+                try:
+                    target_lang_token_id = self.translator_tokenizer.convert_tokens_to_ids(tgt_nllb_lang)
+                except Exception as e_conv:
+                    print(f"Error converting target language code '{tgt_nllb_lang}' to ID: {e_conv}")
+                    return None
+
+                if target_lang_token_id == self.translator_tokenizer.unk_token_id:
+                    print(f"Warning: Target language code '{tgt_nllb_lang}' was converted to UNK token ID.")
+                    return None
+
+                generated_tokens = self.translator_model.generate(
+                    **inputs,
+                    forced_bos_token_id=target_lang_token_id,
+                    max_length=1024, 
+                    repetition_penalty=1.2,
+                    no_repeat_ngram_size=3
+                )
+                translated_text_segment = self.translator_tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
+                translated_parts.append(translated_text_segment)
+            else:
+                print(f"Input text for translation has {total_tokens} tokens. Applying chunking (token limit for tokenizer: {token_limit}).")
+                
+                # Pattern similar to summarizer chunking:
+                # chunk_size for slicing from all_input_ids
+                chunk_slice_size = token_limit - 50 
+                if chunk_slice_size <= 0: # Ensure positive slice size
+                    chunk_slice_size = token_limit // 2 if token_limit > 1 else 1
+                
+                overlap_tokens = 50
+                if overlap_tokens >= chunk_slice_size and chunk_slice_size > 0:
+                    overlap_tokens = chunk_slice_size // 3
+                elif chunk_slice_size == 0:
+                    overlap_tokens = 0
+                
+                start_idx = 0
+                chunk_num = 1
+                while start_idx < total_tokens:
+                    end_idx = min(start_idx + chunk_slice_size, total_tokens)
+                    chunk_token_ids_for_decode = all_input_ids[start_idx:end_idx]
+                    
+                    current_chunk_text_to_translate = self.translator_tokenizer.decode(
+                        chunk_token_ids_for_decode,
+                        skip_special_tokens=True,
+                        clean_up_tokenization_spaces=True
+                    )
+
+                    if not current_chunk_text_to_translate.strip():
+                        print(f"DEBUG: Skipping empty decoded chunk {chunk_num}.")
+                        # Advance start_idx
+                        if end_idx == total_tokens: break
+                        step = chunk_slice_size - overlap_tokens
+                        start_idx += step if step > 0 else 1
+                        if start_idx >= end_idx and end_idx < total_tokens : start_idx = end_idx # Ensure progress
+                        chunk_num += 1
+                        continue
+                    
+                    print(f"DEBUG: Translating chunk {chunk_num}. Input token slice: {start_idx}-{end_idx-1}. Decoded text length: {len(current_chunk_text_to_translate)}")
+                    
+                    inputs = self.translator_tokenizer(
+                        current_chunk_text_to_translate, 
+                        return_tensors="pt", 
+                        truncation=True, 
+                        padding=True,
+                        max_length=token_limit # Tokenizer will cap the input from this text chunk
+                    ).to(self.device)
+
+                    try:
+                        target_lang_token_id = self.translator_tokenizer.convert_tokens_to_ids(tgt_nllb_lang)
+                    except Exception as e_conv:
+                        print(f"Error converting target language code '{tgt_nllb_lang}' to ID for chunk {chunk_num}: {e_conv}")
+                        return None 
+                    if target_lang_token_id == self.translator_tokenizer.unk_token_id:
+                        print(f"Warning: Target language code '{tgt_nllb_lang}' was UNK for chunk {chunk_num}.")
+                        return None
+
+                    generated_tokens = self.translator_model.generate(
+                        **inputs,
+                        forced_bos_token_id=target_lang_token_id,
+                        max_length=1024,
+                        repetition_penalty=1.2,
+                        no_repeat_ngram_size=3
+                    )
+                    translated_segment = self.translator_tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)[0]
+                    translated_parts.append(translated_segment)
+                    
+                    chunk_num +=1
+                    if end_idx == total_tokens:
+                        break
+                    
+                    step = chunk_slice_size - overlap_tokens
+                    start_idx += step if step > 0 else 1 # Ensure progress even if step is not positive
+                    
+                    # Safety break if start_idx doesn't advance properly (should not be needed with step logic)
+                    if start_idx >= total_tokens and end_idx < total_tokens: break 
+                    if start_idx >= end_idx and end_idx < total_tokens : start_idx = end_idx
+
+
+            final_translated_text = " ".join(translated_parts).strip()
+            return final_translated_text
+
         except Exception as e:
             print(f"Error during translation from {src_nllb_lang} to {tgt_nllb_lang}: {e}")
             import traceback
@@ -275,12 +366,20 @@ class Summarizer:
             print("Error: Pegasus model/tokenizer not loaded.")
             return "Error: Summarization model not available."
         try:
+            # Provide default values if None
+            effective_min_length = min_length if min_length is not None else 30
+            effective_max_length = max_length if max_length is not None else 128
+
             inputs = self.pegasus_tokenizer(
                 text_chunk, return_tensors="pt", truncation=True, max_length=self.effective_input_token_limit
             ).to(self.device)
 
             summary_ids = self.pegasus_model.generate(
-                inputs["input_ids"], num_beams=4, min_length=min_length, max_length=max_length, early_stopping=True
+                inputs["input_ids"],
+                num_beams=4,
+                min_length=effective_min_length,
+                max_length=effective_max_length,
+                early_stopping=True
             )
             
             summary_text_raw = self.pegasus_tokenizer.decode(
@@ -301,8 +400,8 @@ class Summarizer:
             traceback.print_exc()
             return f"Error summarizing chunk: {e}"
     
-    def summarize(self, text: str, min_length_per_chunk: int = 20, max_length_per_chunk: int = 80,
-                      overall_min_length: int = 30, overall_max_length: int = 150) -> dict:
+    def summarize(self, text: str, min_length_per_chunk: int = None, max_length_per_chunk: int = None,
+                      overall_min_length: int = None, overall_max_length: int = None) -> dict:
         result = {
             'final_summary': None, 'detected_language_raw': None, 'detected_language_confidence': None,
             'english_translation': None, 'english_summary': None, 'error': None,
@@ -331,26 +430,23 @@ class Summarizer:
         
         # Determine if translation to English is needed
         needs_translation_to_english = False
-        if (detected_lang_raw != 'en' and detected_lang_raw != 'eng'): # Clearly not English
+        if (detected_lang_raw != 'en' and detected_lang_raw != 'eng'):
             needs_translation_to_english = True
-        elif force_translation_flag: # Detected as English but low confidence
+        elif force_translation_flag:
             print(f"INFO: Detected as English ('{detected_lang_raw}') but confidence {confidence} is low. Attempting 'translation' to English to normalize.")
             needs_translation_to_english = True
-            # For "translation" from low-confidence English to English, NLLB needs a source NLLB code.
-            # We'll use 'eng_Latn' as the source for NLLB in this specific case.
-            if not detected_lang_nllb: # If 'en' or 'eng' didn't map (should not happen with good map)
+            if not detected_lang_nllb:
                 detected_lang_nllb = 'eng_Latn' 
-            result['translation_performed'] = True # Mark that we are "translating"
+            result['translation_performed'] = True
         
         if needs_translation_to_english:
-            if detected_lang_nllb: # Check if we have a valid NLLB mapping for the source
+            if detected_lang_nllb:
                 print(f"Original language: {detected_lang_raw} (NLLB src: {detected_lang_nllb}). Translating to English (eng_Latn)...")
                 english_text_translation = self._translate_text(original_text_to_process, detected_lang_nllb, "eng_Latn")
-                result['translation_performed'] = True # Mark that actual translation happened
+                result['translation_performed'] = True 
                 
                 if not english_text_translation or english_text_translation.startswith("Error"):
                     err_msg = f"Error: Translation to English failed for lang {detected_lang_raw}."
-                    # ... (your existing error message construction) ...
                     result['error'] = err_msg
                     return result
                 
