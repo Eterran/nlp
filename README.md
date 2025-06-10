@@ -37,13 +37,15 @@ A complete multilingual news summarization solution using Google Pegasus and Fac
 
 3. **Optional**: Install CUDA for GPU acceleration (faster processing)
 
-4. **Run Application**:
+4. **Download fastText Model**: [fastText Model](https://fasttext.cc/docs/en/language-identification.html)
+
+5. **Run Application**:
 
    ```powershell
    streamlit run app.py
    ```
 
-5. **Access**: Open browser to `http://localhost:8501`
+6. **Access**: Open browser to `http://localhost:8501`
 
 ### File Structure
 
