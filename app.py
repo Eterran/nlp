@@ -62,13 +62,23 @@ def show_summarizer_page():
                         # min/max_length_per_chunk are using defaults from engine
                     )
 
-                    if summary_results.get("error"):
-                        st.error(summary_results["error"])
+                    if summary_results.get('error'):
+                        st.error(summary_results['error'])
                     else:
-                        if summary_results.get("detected_language_ld"):
-                            st.info(
-                                f"Detected Input Language: **{summary_results['detected_language_ld']}**"
-                            )
+                        detected_lang = summary_results.get('detected_language_raw')
+                        confidence = summary_results.get('detected_language_confidence')
+                        
+                        if detected_lang:
+                            lang_display_text = f"Detected Input Language: **{detected_lang}**"
+                            if confidence is not None:
+                                lang_display_text += f" (Confidence: {confidence:.2f})"
+                            st.info(lang_display_text)
+                            if summary_results.get('translation_performed') and \
+                               (detected_lang != 'en' and detected_lang != 'eng'):
+                                st.caption("Translation to English was performed before summarization.")
+                            elif summary_results.get('translation_performed') and \
+                                 (detected_lang == 'en' or detected_lang == 'eng'):
+                                st.caption("Input detected as English with low confidence; an English-to-English 'translation' pass was performed for normalization before summarization.")
 
                         if show_intermediate and summary_results.get(
                             "english_translation"
